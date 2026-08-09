@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Missingness Matrix - UK Crop Microbiome Cryobank</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FAFBFC; --ink:#0B1F2A; --muted:#6B7A85; --line:#DDE3E8;
+    --missing:#12556B;      /* absence: the inked protagonist */
+    --present:#EAEEF1;      /* presence: quiet */
+    --accent:#E8A33D;       /* interaction highlight */
+    --chip:#EEF2F5;
+    --head:#103F52;         /* headings: a touch darker than the cell teal */
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: "Source Sans 3", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --display: "Archivo", "Source Sans 3", system-ui, sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+       -webkit-font-smoothing:antialiased;padding:28px 32px 60px;touch-action:manipulation}
+  h1{font-family:var(--display);font-size:26px;font-weight:800;letter-spacing:-.015em;
+     color:var(--head);margin:0 0 3px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 18px}
+  .sub code{font-family:var(--mono);font-size:12px}
+  #mechanism h2, #glyphs h2, #comissing h2{font-family:var(--display);color:var(--head);font-weight:800}
+
+  #headline{margin:0 0 14px;padding:11px 15px;border-radius:9px;cursor:pointer;
+            background:linear-gradient(0deg,#EAF2F4,#EAF2F4);border:1px solid #CFE0E4;
+            font-size:14px;color:var(--ink);display:flex;align-items:center;gap:10px}
+  #headline.hidden{display:none}
+  #headline .flag{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.06em;
+                  text-transform:uppercase;color:#fff;background:var(--missing);
+                  border-radius:5px;padding:2px 7px;flex:0 0 auto}
+  #headline b{font-family:var(--mono);font-weight:600}
+  #headline .go{margin-left:auto;color:var(--missing);font-size:12px;white-space:nowrap}
+
+  .keybar{display:flex;gap:20px;flex-wrap:wrap;align-items:center;margin:0 0 18px;
+          font-size:12px;color:var(--muted)}
+  .keyitem{display:inline-flex;align-items:center;gap:7px}
+  .ksw{width:13px;height:13px;border-radius:3px;border:1px solid var(--line)}
+  .ksw.ring{background:#fff;border-width:3px;border-radius:50%}
+  .krows{display:inline-flex;flex-direction:column;gap:1.5px;width:16px}
+  .krows i{display:block;background:var(--missing);opacity:.8;border-radius:1px}
+  .krows i:nth-child(1){height:6px}
+  .krows i:nth-child(2){height:3px}
+  .krows i:nth-child(3){height:2px}
+
+  .chips{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px}
+  .chip{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 20px;min-width:118px}
+  .chip .k{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;
+           letter-spacing:.07em;font-weight:600}
+  .chip .v{display:block;font-family:var(--mono);font-size:30px;font-weight:600;line-height:1.05;
+           color:var(--missing);margin-top:5px}
+
+  .controls{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  .controls .group{display:flex;align-items:center;gap:8px}
+  .controls label{font-size:12px;color:var(--muted)}
+  button.seg{font-family:var(--sans);font-size:12px;border:1px solid var(--line);
+             background:#fff;color:var(--ink);padding:6px 11px;border-radius:6px;cursor:pointer}
+  button.seg[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+  button.seg:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .toggle{display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:12px}
+
+  .legend{display:flex;gap:16px;align-items:center;font-size:12px;color:var(--muted);
+          margin-left:auto}
+  .legend .sw{display:inline-block;width:12px;height:12px;border-radius:3px;
+              vertical-align:-2px;margin-right:5px;border:1px solid var(--line)}
+
+  #scroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:#fff}
+  svg{display:block}
+  .colhit{fill:transparent;cursor:pointer}
+  .colhit:hover{fill:rgba(232,163,61,.10)}
+  .rowband:hover{stroke:var(--accent);stroke-width:1.5px}
+  .collabel{font-family:var(--mono);font-size:10px;fill:var(--muted)}
+  .rowmeta{font-family:var(--mono);font-size:11px;fill:var(--ink)}
+  .rowmeta .pct{fill:var(--muted)}
+  .axis-note{font-size:11px;fill:var(--muted)}
+
+  #tip{position:fixed;pointer-events:none;background:var(--ink);color:#fff;font-size:12px;
+       line-height:1.45;padding:8px 10px;border-radius:7px;opacity:0;transition:opacity .08s;
+       max-width:260px;z-index:10}
+  #tip b{font-family:var(--mono);font-weight:600}
+  #tip .st{color:var(--accent)}
+
+  #drop{display:none;border:2px dashed var(--line);border-radius:10px;padding:40px;
+        text-align:center;color:var(--muted);font-size:14px;margin-top:10px}
+  #drop.show{display:block}
+  #drop input{display:none}
+  #drop label{color:var(--ink);text-decoration:underline;cursor:pointer}
+
+  select.sel{font-family:var(--sans);font-size:12px;border:1px solid var(--line);
+             background:#fff;color:var(--ink);padding:6px 8px;border-radius:6px;cursor:pointer}
+  select.sel:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  #mechanism{margin-top:26px}
+  #mechanism.hidden{display:none}
+  #mechanism h2{font-size:16px;font-weight:650;margin:0 0 3px;letter-spacing:-.01em}
+  #mechanism .msub{color:var(--muted);font-size:12.5px;margin:0 0 14px;max-width:760px}
+  .mlegend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:8px}
+  .mlegend .sw{display:inline-block;width:11px;height:11px;border-radius:3px;
+               vertical-align:-1px;margin-right:5px}
+  .mrow{display:grid;grid-template-columns:210px 1fr;gap:16px;align-items:center;
+        padding:8px 0;border-top:1px solid var(--line)}
+  .mname{font-family:var(--mono);font-size:12px;color:var(--ink);word-break:break-word}
+  .mname .tag{display:inline-block;font-family:var(--sans);font-size:10px;color:#fff;
+              background:var(--missing);border-radius:4px;padding:1px 6px;margin-left:6px;
+              letter-spacing:.02em}
+  .mgroups{display:flex;flex-direction:column;gap:5px}
+  .mgrp{display:grid;grid-template-columns:150px 1fr 46px;gap:10px;align-items:center}
+  .glabel{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:right;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .track{height:13px;background:var(--present);border-radius:3px;overflow:hidden}
+  .fill{height:100%;border-radius:3px}
+  .grate{font-family:var(--mono);font-size:11px;color:var(--ink)}
+  .mfind{font-size:12.5px;color:var(--ink);line-height:1.5;margin-top:9px;
+         padding:8px 11px;background:#F1F5F7;border-left:3px solid var(--missing);border-radius:4px}
+  .mfind b{font-family:var(--mono);font-weight:600}
+  .mfind .lead{color:var(--missing);font-weight:700;margin-right:5px}
+
+  .mlegend .leghint{color:var(--muted)}
+  .legbtn{font-family:var(--sans);font-size:12px;border:1px solid var(--line);background:#fff;
+          color:var(--ink);padding:4px 10px;border-radius:20px;cursor:pointer}
+  .legbtn:hover{border-color:var(--missing)}
+  .legbtn.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .legbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  #detail{margin:0 0 14px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;
+          background:#F7F9FA}
+  #detail.hidden{display:none}
+  .dhead{display:flex;align-items:center;gap:12px}
+  .dhead h2{font-size:15px;font-weight:650;margin:0;flex:0 0 auto}
+  .dclear{margin-left:auto;font-size:11px;padding:4px 10px}
+  #detail .dsub{color:var(--muted);font-size:12.5px;margin:8px 0 0;max-width:820px}
+  .dchips{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:11px}
+  .dlabel{font-size:12px;color:var(--muted);margin-right:2px}
+  .dchip{font-family:var(--mono);font-size:11px;border:1px solid var(--line);background:#fff;
+         border-radius:6px;padding:3px 9px;display:inline-flex;align-items:center;gap:6px}
+  .dchip.miss{border-color:var(--missing);color:var(--missing)}
+  .dchip .dot{width:9px;height:9px;border-radius:50%}
+
+  #glyphs{margin-top:28px}
+  .ghead{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  #glyphs h2{font-size:16px;font-weight:650;margin:0;letter-spacing:-.01em}
+  #glyphs .msub{color:var(--muted);font-size:12.5px;margin:8px 0 0;max-width:820px}
+  .glyphgrid{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
+  .glyph{width:48px;text-align:center;cursor:pointer}
+  .glyph svg{display:block;margin:0 auto}
+  .glyph .glabel2{font-family:var(--mono);font-size:8px;color:var(--muted);margin-top:1px;
+                  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:48px}
+  .glyph:hover .glabel2{color:var(--ink)}
+  .glyph.sel .glabel2{color:var(--accent);font-weight:600}
+
+  #comissing{margin-top:28px}
+  #comissing h2{font-size:16px;font-weight:650;margin:0 0 3px;letter-spacing:-.01em}
+  #comissing .msub{color:var(--muted);font-size:12.5px;margin:0 0 10px;max-width:840px}
+  #comgraph{border:1px solid var(--line);border-radius:10px;background:#fff;overflow:hidden}
+  .cnode{cursor:pointer}
+  .clabel{font-family:var(--mono);font-size:9px;fill:var(--ink);pointer-events:none}
+  .cempty{color:var(--muted);font-size:13px;padding:24px}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+  <h1 id="title">Missingness Matrix</h1>
+  <p class="sub" id="subtitle">Each row is a distinct missingness pattern; row height is
+     proportional to how many samples share it. Inked cells are <b>missing</b>.</p>
+
+  <div id="headline" class="hidden"></div>
+
+  <div class="keybar">
+    <span class="keyitem"><span class="ksw" style="background:var(--missing)"></span>inked = missing value</span>
+    <span class="keyitem"><span class="ksw" style="background:var(--present)"></span>pale = present</span>
+    <span class="keyitem"><span class="krows"><i></i><i></i><i></i></span>each row = a pattern (height = share of samples)</span>
+    <span class="keyitem"><span class="ksw ring" style="border-color:var(--accent)"></span>amber = partly missing (the structured kind)</span>
+  </div>
+
+  <div class="chips" id="chips"></div>
+
+  <div class="controls">
+    <div class="group">
+      <label>Sort columns</label>
+      <button class="seg" id="sortRate" aria-pressed="true">by missing rate</button>
+      <button class="seg" id="sortName" aria-pressed="false">A-Z</button>
+    </div>
+    <div class="group">
+      <label>Order rows</label>
+      <button class="seg" id="rowFreq" aria-pressed="true">by frequency</button>
+      <button class="seg" id="rowMiss" aria-pressed="false">by missingness</button>
+    </div>
+    <div class="group">
+      <label>Row height</label>
+      <button class="seg" id="hProp" aria-pressed="true">proportional</button>
+      <button class="seg" id="hEqual" aria-pressed="false">equal</button>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="focus"> focus structured missingness
+    </label>
+    <div class="group">
+      <label>Explain missingness by</label>
+      <select id="explainBy" class="sel"><option value="">(none)</option></select>
+    </div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--missing)"></span>missing</span>
+      <span><span class="sw" style="background:var(--present)"></span>present</span>
+    </div>
+  </div>
+
+  <div id="detail" class="hidden"></div>
+
+  <div id="scroll"><svg id="chart"></svg></div>
+
+  <div id="mechanism" class="hidden"></div>
+
+  <div id="glyphs">
+    <div class="ghead">
+      <h2>Variable glyphs</h2>
+      <div class="group">
+        <label>Sort</label>
+        <button class="seg" id="gRate" aria-pressed="true">missing rate</button>
+        <button class="seg" id="gDeg" aria-pressed="false">co-missingness</button>
+        <button class="seg" id="gName" aria-pressed="false">A-Z</button>
+      </div>
+    </div>
+    <p class="msub">One glyph per variable. The ring fills with the variable's missing rate;
+       <b style="color:var(--accent)">amber</b> marks partial (structured) missingness - the
+       interesting kind - while <b style="color:var(--missing)">teal</b> marks all-or-nothing
+       columns. The centre dot grows with how many other variables it tends to go missing with.
+       Click a glyph to highlight its column in the matrix.</p>
+    <div class="glyphgrid" id="glyphgrid"></div>
+  </div>
+
+  <div id="comissing">
+    <h2>Co-missingness</h2>
+    <p class="msub" id="comsub"></p>
+    <div id="comgraph"></div>
+  </div>
+
+  <div id="drop">
+    Couldn't auto-load <code>summary.json</code>.
+    <label for="file">Choose it</label> or drop it here.
+    <input type="file" id="file" accept=".json,application/json">
+  </div>
+
+  <div id="tip"></div>
+
+<script>
+const state = { sort:'rate', focus:false, rowSort:'freq', rowH:'prop', explainBy:'', sel:null,
+                glyphSort:'rate', highlightVar:null, data:null };
+const tip = d3.select("#tip");
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const PALETTE = ["#12556B","#C97B2C","#5B8C5A","#8A5DB0","#B0472B","#3E7CB1","#6B7A85","#A23E5C"];
+const groupColor = d3.scaleOrdinal();
+function setGroupColors(ev){
+  if(!ev || !state.data.explanatory) return;
+  const vals=state.data.explanatory.conditional_missing[ev].values.map(v=>v.value);
+  groupColor.domain(vals).range(PALETTE);
+}
+
+function showTip(html, ev){
+  tip.html(html).style("opacity",1)
+     .style("left",(ev.clientX+14)+"px").style("top",(ev.clientY+14)+"px");
+}
+function hideTip(){ tip.style("opacity",0); }
+
+// touch: dismiss any lingering tooltip when tapping outside the visuals
+document.addEventListener('pointerdown', (e)=>{
+  if(!e.target.closest('#chart, #comgraph, .glyph, #headline')) hideTip();
+});
+
+// ---- data loading: try fetch, fall back to file picker ----
+fetch("summary.json").then(r=>{ if(!r.ok) throw 0; return r.json(); })
+  .then(init).catch(()=> d3.select("#drop").classed("show",true));
+
+d3.select("#file").on("change", function(){
+  const f=this.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=e=>{ d3.select("#drop").classed("show",false); init(JSON.parse(e.target.result)); };
+  rd.readAsText(f);
+});
+const drop=document.getElementById("drop");
+["dragover","dragleave","drop"].forEach(t=>drop.addEventListener(t,e=>e.preventDefault()));
+drop.addEventListener("drop",e=>{
+  const f=e.dataTransfer.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=ev=>{ d3.select("#drop").classed("show",false); init(JSON.parse(ev.target.result)); };
+  rd.readAsText(f);
+});
+
+function init(data){
+  state.data=data;
+  state.sel=null;
+  state.highlightVar=null;
+
+  // dataset-agnostic title: use fields from the summary if present, else defaults
+  if(data.title) d3.select("#title").text(data.title);
+  if(data.subtitle) d3.select("#subtitle").html(data.subtitle);
+
+  // precompute per-variable co-missingness degree + partners from the edge list
+  const deg={}, partners={};
+  data.variables.forEach(v=>{ deg[v.variable]=0; partners[v.variable]=[]; });
+  (data.comissingness_edges||[]).forEach(e=>{
+    deg[e.source]=(deg[e.source]||0)+1; deg[e.target]=(deg[e.target]||0)+1;
+    (partners[e.source]=partners[e.source]||[]).push({v:e.target, corr:e.corr});
+    (partners[e.target]=partners[e.target]||[]).push({v:e.source, corr:e.corr});
+  });
+  data._deg=deg; data._partners=partners; data._maxdeg=d3.max(Object.values(deg))||1;
+  // chips
+  const ov=data.overview, fmtPct=d3.format(".1%"), fmtN=d3.format(",");
+  const chips=[
+    ["records", fmtN(ov.n_records)],
+    ["variables", fmtN(ov.n_variables)],
+    ["overall missing", fmtPct(ov.overall_missing_rate)],
+    ["distinct patterns", fmtN(data.patterns.length)],
+  ];
+  d3.select("#chips").selectAll(".chip").data(chips).join("div").attr("class","chip")
+    .html(d=>`<span class="k">${d[0]}</span><span class="v"${d[0]==="overall missing"?' style="color:#E8A33D"':''}>${d[1]}</span>`);
+
+  d3.select("#sortRate").on("click",()=>setSort('rate'));
+  d3.select("#sortName").on("click",()=>setSort('name'));
+  d3.select("#rowFreq").on("click",()=>setRowSort('freq'));
+  d3.select("#rowMiss").on("click",()=>setRowSort('miss'));
+  d3.select("#hProp").on("click",()=>setRowH('prop'));
+  d3.select("#hEqual").on("click",()=>setRowH('equal'));
+  d3.select("#focus").on("change",function(){ state.focus=this.checked; render(); });
+  d3.select("#gRate").on("click",()=>setGlyphSort('rate'));
+  d3.select("#gDeg").on("click",()=>setGlyphSort('deg'));
+  d3.select("#gName").on("click",()=>setGlyphSort('name'));
+
+  // populate "explain by" with candidates that actually discriminate,
+  // ordered by explanatory power (biggest missing-rate spread across groups)
+  if(data.explanatory && data.explanatory.candidates){
+    const cm=data.explanatory.conditional_missing;
+    const power=ev=>{
+      let best=0;
+      const t=cm[ev].targets;
+      for(const tv in t){ const a=Object.values(t[tv]); best=Math.max(best, d3.max(a)-d3.min(a)); }
+      return best;
+    };
+    const ranked=data.explanatory.candidates
+      .filter(ev=> cm[ev] && power(ev)>0.05)
+      .sort((a,b)=> power(b)-power(a));
+    const sel=d3.select("#explainBy");
+    ranked.forEach(ev=> sel.append("option").attr("value",ev).text(ev));
+    sel.on("change",function(){ state.explainBy=this.value; render(); });
+  }
+
+  showHeadline(data);
+
+  window.addEventListener("resize", ()=>render(false));
+  render();
+  renderComissing();
+}
+
+// Find the strongest "missing only when X = Y" relationship and state it up top.
+function showHeadline(data){
+  const box=d3.select("#headline");
+  if(!data.explanatory){ box.classed("hidden",true); return; }
+  const cm=data.explanatory.conditional_missing;
+  let best=null;
+  for(const ev in cm){
+    const vals=cm[ev].values.map(v=>v.value);
+    const counts={}; cm[ev].values.forEach(v=> counts[v.value]=v.count);
+    const totalN=d3.sum(Object.values(counts))||1;
+    for(const tv in cm[ev].targets){
+      if(tv===ev) continue;
+      const rates=cm[ev].targets[tv];
+      const arr=vals.map(v=> rates[v] ?? 0);
+      const allExtreme=arr.every(r=> r>=0.98 || r<=0.02);
+      if(!(allExtreme && Math.max(...arr)>=0.98 && Math.min(...arr)<=0.02)) continue;
+      const missVals=vals.filter(v=> (rates[v]??0)>=0.98);
+      const coverage=d3.sum(missVals,v=>counts[v])/totalN;   // share of samples affected
+      const score=(vals.length===2?100:0) + coverage;        // prefer clean 2-group splits
+      if(!best || score>best.score)
+        best={ev,tv,missVals,presVals:vals.filter(v=>(rates[v]??0)<=0.02),score};
+    }
+  }
+  if(!best){ box.classed("hidden",true); return; }
+  const orList=a=> a.length<=1?(a[0]||""):a.slice(0,-1).join(", ")+" or "+a[a.length-1];
+  box.classed("hidden",false).html(
+    `<span class="flag">key finding</span>`+
+    `<span><b>${best.tv}</b> is missing only when <b>${best.ev}</b> is <b>${orList(best.missVals)}</b> `+
+    `- never otherwise.</span>`+
+    `<span class="go">see how ›</span>`)
+    .on("click",()=>{
+      state.explainBy=best.ev;
+      d3.select("#explainBy").property("value",best.ev);
+      render();
+      document.getElementById("mechanism").scrollIntoView({behavior:'smooth',block:'start'});
+    });
+}
+function setSort(mode){
+  state.sort=mode;
+  d3.select("#sortRate").attr("aria-pressed", mode==='rate');
+  d3.select("#sortName").attr("aria-pressed", mode==='name');
+  render();
+}
+function setRowSort(mode){
+  state.rowSort=mode;
+  d3.select("#rowFreq").attr("aria-pressed", mode==='freq');
+  d3.select("#rowMiss").attr("aria-pressed", mode==='miss');
+  render();
+}
+function setRowH(mode){
+  state.rowH=mode;
+  d3.select("#hProp").attr("aria-pressed", mode==='prop');
+  d3.select("#hEqual").attr("aria-pressed", mode==='equal');
+  render();
+}
+function setGlyphSort(mode){
+  state.glyphSort=mode;
+  d3.select("#gRate").attr("aria-pressed", mode==='rate');
+  d3.select("#gDeg").attr("aria-pressed", mode==='deg');
+  d3.select("#gName").attr("aria-pressed", mode==='name');
+  renderGlyphs();
+}
+
+function orderedVariables(){
+  let v=state.data.variables.slice();
+  if(state.focus) v=v.filter(d=> d.missing_rate>0 && d.missing_rate<1);
+  if(state.sort==='rate') v.sort((a,b)=> b.missing_rate-a.missing_rate || a.variable.localeCompare(b.variable));
+  else v.sort((a,b)=> a.variable.localeCompare(b.variable));
+  return v;
+}
+
+function render(animate=true){
+  const data=state.data;
+  const anim = animate && !(window.matchMedia &&
+               window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const vars=orderedVariables();
+
+  // A "group filter" (set by clicking a group in the legend) restricts the whole
+  // view to one subset of samples, using the pre-computed pattern composition.
+  const gf = (state.sel && state.sel.type==='group') ? state.sel : null;
+  const gcomp = gf ? (data.explanatory.pattern_composition[gf.ev]||{}) : null;
+  const selPid = (state.sel && state.sel.type==='pattern') ? state.sel.id : null;
+
+  let rows=data.patterns.slice().sort(
+    state.rowSort==='miss'
+      ? (a,b)=> b.n_missing_vars-a.n_missing_vars || b.count-a.count
+      : (a,b)=> b.count-a.count);
+
+  // per-row sample count: overall, or this group's count when filtering
+  const countOf = p => gf ? ((gcomp[p.pattern_id]||{})[gf.value]||0) : p.count;
+  if(gf) rows = rows.filter(p=> countOf(p)>0);
+  const totalCount = d3.sum(rows, countOf) || 1;
+  const propOf = p => countOf(p)/totalCount;
+  const missingSets = rows.map(p=> new Set(p.missing_variables));
+
+  // per-variable bar value: overall rate, or recomputed for the filtered subset
+  const barVal={};
+  vars.forEach(v=>{
+    if(gf){
+      let miss=0;
+      rows.forEach((p,ri)=>{ if(missingSets[ri].has(v.variable)) miss+=countOf(p); });
+      barVal[v.variable]=miss/totalCount;
+    } else barVal[v.variable]=v.missing_rate;
+  });
+
+  const container=document.getElementById("scroll").clientWidth;
+  const margin={top:64, right:(state.explainBy&&!gf)?210:130, bottom:26, left:14};
+  const innerW=Math.max(container-margin.left-margin.right, 200);
+
+  const colW=Math.max(4, Math.min(16, innerW/vars.length));
+  const matrixW=colW*vars.length;
+  const showLabels = colW>=9;
+
+  const matrixH=440, minRow=7;
+  const heights = state.rowH==='equal'
+    ? rows.map(()=> Math.max(minRow, matrixH/rows.length))
+    : rows.map(p=> Math.max(minRow, propOf(p)*matrixH));
+  const ys=[]; let acc=0; heights.forEach(h=>{ ys.push(acc); acc+=h; });
+  const totalH=acc;
+
+  const barH=40;
+  const svgW=margin.left+matrixW+margin.right;
+  const svgH=margin.top+totalH+margin.bottom;
+
+  const x=d3.scaleBand().domain(vars.map(v=>v.variable)).range([0,matrixW]).paddingInner(colW>6?.14:.04);
+  const missingColor=getComputedStyle(document.documentElement).getPropertyValue('--missing').trim();
+  const fmtPct=d3.format(".1%"), fmtN=d3.format(",");
+
+  const svg=d3.select("#chart").attr("width",svgW).attr("height",svgH);
+  svg.selectAll("*").remove();
+  const g=svg.append("g").attr("transform",`translate(${margin.left},${margin.top})`);
+
+  // ---- per-variable missing-rate bar strip ----
+  const bar=svg.append("g").attr("transform",`translate(${margin.left},${margin.top-barH-8})`);
+  const barsel=bar.selectAll("rect").data(vars).join("rect")
+    .attr("x",v=>x(v.variable)).attr("width",x.bandwidth())
+    .attr("fill",gf?groupColor(gf.value):missingColor).attr("opacity",.85);
+  if(anim){
+    barsel.attr("y",barH).attr("height",0)
+      .transition().duration(450)
+      .attr("y",v=>barH-barH*barVal[v.variable]).attr("height",v=>barH*barVal[v.variable]);
+  } else {
+    barsel.attr("y",v=>barH-barH*barVal[v.variable]).attr("height",v=>barH*barVal[v.variable]);
+  }
+  bar.append("text").attr("class","axis-note").attr("x",0).attr("y",-4)
+     .text(gf ? `per-variable missing rate within ${gf.ev} = ${gf.value}  (0-100%)`
+              : "per-variable missing rate  (0-100%)");
+
+  // ---- matrix cells (dim non-selected rows when a pattern is selected) ----
+  rows.forEach((p,ri)=>{
+    const targetOp=(selPid==null || selPid===p.pattern_id) ? 1 : .25;
+    const rowG=g.append("g").attr("transform",`translate(0,${ys[ri]})`);
+    rowG.selectAll("rect").data(vars).join("rect")
+      .attr("x",v=>x(v.variable)).attr("width",x.bandwidth())
+      .attr("y",0).attr("height",heights[ri]-1)
+      .attr("fill",v=> missingSets[ri].has(v.variable) ? "var(--missing)" : "var(--present)");
+    if(anim) rowG.attr("opacity",0).transition().delay(ri*45).duration(380).attr("opacity",targetOp);
+    else rowG.attr("opacity",targetOp);
+  });
+
+  // ---- column labels (only when wide enough) ----
+  if(showLabels){
+    g.append("g").attr("transform",`translate(0,${totalH+4})`)
+      .selectAll("text").data(vars).join("text")
+      .attr("class","collabel")
+      .attr("transform",v=>`translate(${x(v.variable)+x.bandwidth()/2},0) rotate(45)`)
+      .text(v=> v.variable.length>18 ? v.variable.slice(0,17)+"…" : v.variable);
+  }
+
+  // ---- row meta labels (count + %) + composition strip ----
+  const meta=g.append("g").attr("transform",`translate(${matrixW+12},0)`);
+  const comp = (state.explainBy && !gf) ? (data.explanatory.pattern_composition[state.explainBy]||{}) : null;
+  if(state.explainBy) setGroupColors(state.explainBy);
+  rows.forEach((p,ri)=>{
+    const t=meta.append("text").attr("class","rowmeta")
+      .attr("y",ys[ri]+Math.min(heights[ri]/2+4,heights[ri]-2))
+      .attr("opacity",(selPid==null || selPid===p.pattern_id)?1:.4);
+    t.append("tspan").text(fmtN(countOf(p)));
+    t.append("tspan").attr("class","pct").attr("dx",6).text(fmtPct(propOf(p)));
+    if(comp){
+      const parts=comp[p.pattern_id]||{};
+      const total=d3.sum(Object.values(parts))||1;
+      let cx=96; const bw=92, by=ys[ri]+2, bh=Math.max(4,Math.min(heights[ri]-4,13));
+      Object.entries(parts).forEach(([val,cnt])=>{
+        const w=bw*cnt/total;
+        meta.append("rect").attr("x",cx).attr("y",by).attr("width",w).attr("height",bh)
+          .attr("fill",groupColor(val)).attr("rx",1)
+          .append("title").text(`${val}: ${fmtN(cnt)}`);
+        cx+=w;
+      });
+    }
+  });
+
+  // ---- column hover overlays ----
+  const colTip=(ev,v)=> showTip(
+        `<b>${v.variable}</b><br>missing <span class="st">${fmtPct(barVal[v.variable])}</span>`+
+        (gf?` within ${gf.value}`:``), ev);
+  g.append("g").selectAll("rect.colhit").data(vars).join("rect")
+    .attr("class","colhit")
+    .attr("x",v=>x(v.variable)).attr("width",x.bandwidth())
+    .attr("y",0).attr("height",totalH)
+    .on("mousemove",colTip)
+    .on("click",colTip)          // tap-to-inspect on touch devices
+    .on("mouseleave",hideTip);
+
+  // ---- row overlays: hover tooltip + click to select the pattern ----
+  g.append("g").selectAll("rect.rowband").data(rows).join("rect")
+    .attr("class","rowband")
+    .attr("x",0).attr("y",(p,ri)=>ys[ri]).attr("width",matrixW).attr("height",(p,ri)=>heights[ri]-1)
+    .attr("fill","transparent").style("cursor","pointer")
+    .attr("stroke",p=> selPid===p.pattern_id ? "var(--accent)" : "none")
+    .attr("stroke-width",2)
+    .on("mousemove",(ev,p)=> showTip(
+        `<b>pattern ${p.pattern_id}</b><br>`+
+        `<span class="st">${fmtN(countOf(p))}</span> samples (${fmtPct(propOf(p))})<br>`+
+        `${p.n_missing_vars} of ${data.overview.n_variables} variables missing<br>`+
+        `<span style="color:var(--accent)">click to inspect</span>`, ev))
+    .on("mouseleave",hideTip)
+    .on("click",(ev,p)=>{
+      state.sel = (selPid===p.pattern_id) ? null : {type:'pattern', id:p.pattern_id};
+      render(false);
+    });
+
+  // ---- highlight the column of a glyph-selected variable ----
+  if(state.highlightVar){
+    const hv=vars.find(v=> v.variable===state.highlightVar);
+    if(hv) g.append("rect")
+      .attr("x",x(hv.variable)-1).attr("y",-2)
+      .attr("width",x.bandwidth()+2).attr("height",totalH+4)
+      .attr("fill","none").attr("stroke","var(--accent)").attr("stroke-width",2)
+      .style("pointer-events","none");
+  }
+
+  if(!showLabels){
+    svg.append("text").attr("class","axis-note")
+      .attr("x",margin.left).attr("y",svgH-8)
+      .text("hover a column for its variable name  ·  click a row to inspect a pattern  ·  toggle “focus structured missingness”");
+  }
+
+  renderDetail();
+  renderMechanism();
+  renderGlyphs();
+}
+
+function renderGlyphs(){
+  const data=state.data;
+  const box=d3.select("#glyphgrid"); box.html("");
+  let vars=data.variables.slice();
+  if(state.glyphSort==='deg')
+    vars.sort((a,b)=> (data._deg[b.variable]-data._deg[a.variable]) || b.missing_rate-a.missing_rate);
+  else if(state.glyphSort==='name')
+    vars.sort((a,b)=> a.variable.localeCompare(b.variable));
+  else
+    vars.sort((a,b)=> b.missing_rate-a.missing_rate);
+
+  const R=14, TH=5;
+  const degScale=d3.scaleSqrt().domain([0,data._maxdeg]).range([0,6]);
+  const cMiss=cssVar('--missing'), cAcc=cssVar('--accent'),
+        cPres=cssVar('--present'), cMut=cssVar('--muted');
+  const arc=d3.arc().innerRadius(R-TH).outerRadius(R);
+  const fmtPct=d3.format(".0%"), fmtN=d3.format(",");
+
+  vars.forEach(v=>{
+    const partial = v.missing_rate>0 && v.missing_rate<1;
+    const selq = state.highlightVar===v.variable;
+    const cell=box.append("div").attr("class","glyph"+(selq?" sel":""))
+      .on("mousemove",(ev)=>{
+        const ps=(data._partners[v.variable]||[]).slice()
+          .sort((a,b)=>Math.abs(b.corr)-Math.abs(a.corr)).slice(0,3).map(p=>p.v);
+        showTip(`<b>${v.variable}</b><br>missing <span class="st">${fmtPct(v.missing_rate)}</span>`+
+          `<br>co-missing with <span class="st">${data._deg[v.variable]}</span> variable(s)`+
+          (ps.length?`<br>e.g. ${ps.join(", ")}`:``), ev);
+      })
+      .on("mouseleave",hideTip)
+      .on("click",()=>{ state.highlightVar = selq ? null : v.variable; render(false); });
+
+    const s=(R+3)*2;
+    const gg=cell.append("svg").attr("width",s).attr("height",s)
+      .append("g").attr("transform",`translate(${s/2},${s/2})`);
+    gg.append("path").attr("d",arc({startAngle:0,endAngle:2*Math.PI})).attr("fill",cPres);
+    gg.append("path").attr("d",arc({startAngle:0,endAngle:2*Math.PI*v.missing_rate}))
+      .attr("fill", partial?cAcc:cMiss);
+    const dr=degScale(data._deg[v.variable]||0);
+    if(dr>0.5) gg.append("circle").attr("r",dr).attr("fill",cMut);
+    if(selq) gg.append("circle").attr("r",R+2).attr("fill","none")
+      .attr("stroke",cAcc).attr("stroke-width",2);
+    cell.append("div").attr("class","glabel2").attr("title",v.variable).text(v.variable);
+  });
+}
+
+function renderComissing(){
+  const data=state.data;
+  const wrap=d3.select("#comgraph"); wrap.html("");
+  const sub=d3.select("#comsub");
+  const edges=(data.comissingness_edges||[]);
+  if(!edges.length){
+    sub.html("No two variables go missing together strongly enough (|φ| ≥ 0.5) to link.");
+    wrap.append("div").attr("class","cempty").text("No co-missingness links in this dataset.");
+    return;
+  }
+
+  const rate={}; data.variables.forEach(v=> rate[v.variable]=v.missing_rate);
+  const deg={}; const adj={};
+  edges.forEach(e=>{ deg[e.source]=(deg[e.source]||0)+1; deg[e.target]=(deg[e.target]||0)+1; });
+  const ids=Array.from(new Set(edges.flatMap(e=>[e.source,e.target])));
+  ids.forEach(i=> adj[i]=new Set());
+  edges.forEach(e=>{ adj[e.source].add(e.target); adj[e.target].add(e.source); });
+
+  const rScale=d3.scaleSqrt().domain([0, d3.max(ids,i=>rate[i])||1]).range([6,16]);
+  const nodes=ids.map(id=>({id, r:rScale(rate[id]), rate:rate[id], deg:deg[id]}));
+  const links=edges.map(e=>({source:e.source, target:e.target, corr:e.corr}));
+
+  const allOne=edges.every(e=>Math.abs(e.corr)>=0.999);
+  sub.html(`Variables joined by a line go missing in the same records. `+
+    (allOne
+      ? `Every link here is a <b>perfect</b> co-occurrence (φ = 1.0), so each cluster is a set of variables that are <b>always absent together</b>.`
+      : `Line thickness ∝ strength of the relationship.`)+
+    ` Node size ∝ missing rate. Hover to isolate a cluster; click a node to highlight its column in the matrix above.`);
+
+  const cMiss=cssVar('--missing'), cAcc=cssVar('--accent'), cNeg="#B0472B";
+  const W=Math.max(document.getElementById("comgraph").clientWidth||800, 320), H=380;
+  const svg=wrap.append("svg").attr("width",W).attr("height",H);
+
+  const link=svg.append("g").selectAll("line").data(links).join("line")
+    .attr("class","cedge")
+    .attr("stroke",d=> d.corr<0?cNeg:cMiss)
+    .attr("stroke-opacity",.28)
+    .attr("stroke-width",d=> 1+2*Math.abs(d.corr));
+
+  const sim=d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(links).id(d=>d.id).distance(70).strength(.5))
+    .force("charge", d3.forceManyBody().strength(-180))
+    .force("center", d3.forceCenter(W/2,H/2))
+    .force("collide", d3.forceCollide(d=>d.r+4));
+
+  const node=svg.append("g").selectAll("circle").data(nodes).join("circle")
+    .attr("class","cnode").attr("r",d=>d.r)
+    .attr("fill",cAcc).attr("fill-opacity",.85).attr("stroke",cMiss).attr("stroke-width",1.4)
+    .on("mousemove",(ev,d)=> showTip(
+        `<b>${d.id}</b><br>missing <span class="st">${d3.format(".1%")(d.rate)}</span>`+
+        `<br>always co-missing with <span class="st">${d.deg}</span> variable(s)`, ev))
+    .on("mouseover",(ev,d)=>{
+        node.attr("opacity",n=> (n.id===d.id||adj[d.id].has(n.id))?1:.18);
+        link.attr("stroke-opacity",l=> (l.source.id===d.id||l.target.id===d.id)?.7:.04);
+    })
+    .on("mouseout",()=>{ hideTip(); node.attr("opacity",1); link.attr("stroke-opacity",.28); })
+    .on("click",(ev,d)=>{
+        state.highlightVar = (state.highlightVar===d.id) ? null : d.id;
+        render(false);
+        node.attr("stroke",n=> n.id===state.highlightVar?cAcc:cMiss)
+            .attr("stroke-width",n=> n.id===state.highlightVar?3:1.4);
+    })
+    .call(d3.drag()
+      .on("start",(ev,d)=>{ if(!ev.active) sim.alphaTarget(.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on("drag",(ev,d)=>{ d.fx=ev.x; d.fy=ev.y; })
+      .on("end",(ev,d)=>{ if(!ev.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }));
+
+  const label=svg.append("g").selectAll("text").data(nodes).join("text")
+    .attr("class","clabel").attr("text-anchor","middle").attr("dy",d=>-d.r-3)
+    .text(d=> d.id.length>16 ? d.id.slice(0,15)+"…" : d.id);
+
+  sim.on("tick",()=>{
+    nodes.forEach(n=>{ n.x=Math.max(n.r,Math.min(W-n.r,n.x)); n.y=Math.max(n.r+11,Math.min(H-n.r,n.y)); });
+    link.attr("x1",d=>d.source.x).attr("y1",d=>d.source.y)
+        .attr("x2",d=>d.target.x).attr("y2",d=>d.target.y);
+    node.attr("cx",d=>d.x).attr("cy",d=>d.y);
+    label.attr("x",d=>d.x).attr("y",d=>d.y);
+  });
+}
+
+function renderDetail(){
+  const data=state.data, sel=state.sel;
+  const box=d3.select("#detail");
+  if(!sel){ box.classed("hidden",true).html(""); return; }
+  box.classed("hidden",false).html("");
+  const fmtN=d3.format(","), fmtPct=d3.format(".1%");
+
+  const head=box.append("div").attr("class","dhead");
+  head.append("button").attr("class","seg dclear").text("✕ clear")
+      .on("click",()=>{ state.sel=null; render(); });
+
+  if(sel.type==='pattern'){
+    const p=data.patterns.find(d=>d.pattern_id===sel.id);
+    head.insert("h2",".dclear").text(`Pattern ${p.pattern_id}`);
+    box.append("p").attr("class","dsub").html(
+      `<b>${fmtN(p.count)}</b> samples (${fmtPct(p.proportion)}) share this exact missingness signature - `+
+      `${p.n_missing_vars} of ${data.overview.n_variables} variables absent.`);
+
+    // group composition, if an explanatory variable is active
+    if(state.explainBy && data.explanatory){
+      setGroupColors(state.explainBy);
+      const parts=(data.explanatory.pattern_composition[state.explainBy]||{})[p.pattern_id]||{};
+      const wrap=box.append("div").attr("class","dchips");
+      wrap.append("span").attr("class","dlabel").text(`${state.explainBy}:`);
+      Object.entries(parts).forEach(([val,cnt])=>
+        wrap.append("span").attr("class","dchip")
+          .style("border-color",groupColor(val))
+          .html(`<span class="dot" style="background:${groupColor(val)}"></span>${val} - ${fmtN(cnt)}`));
+    }
+
+    // what distinguishes this pattern: the partial-missing variables it lacks
+    const structured=new Set(data.variables.filter(v=>v.missing_rate>0&&v.missing_rate<1).map(v=>v.variable));
+    const distinct=p.missing_variables.filter(v=> structured.has(v));
+    const wrap2=box.append("div").attr("class","dchips");
+    if(distinct.length){
+      wrap2.append("span").attr("class","dlabel").text("Beyond the structural block, this pattern is missing:");
+      distinct.forEach(v=> wrap2.append("span").attr("class","dchip miss").text(v));
+    } else {
+      wrap2.append("span").attr("class","dlabel").text("Only the always-empty structural columns are missing - the most complete pattern.");
+    }
+  }
+
+  if(sel.type==='group'){
+    setGroupColors(sel.ev);
+    const comp=data.explanatory.pattern_composition[sel.ev]||{};
+    let total=0, npat=0;
+    Object.values(comp).forEach(parts=>{ if(parts[sel.value]){ total+=parts[sel.value]; npat++; } });
+    head.insert("h2",".dclear").html(
+      `Filtered - <span style="color:${groupColor(sel.value)}">${sel.ev} = ${sel.value}</span>`);
+    box.append("p").attr("class","dsub").html(
+      `The matrix, bars and rates now describe only these <b>${fmtN(total)}</b> samples `+
+      `(${npat} distinct pattern${npat===1?'':'s'}). Clear to return to the full dataset.`);
+  }
+}
+
+function renderMechanism(){
+  const data=state.data, ev=state.explainBy;
+  const box=d3.select("#mechanism");
+  if(!ev || !data.explanatory){ box.classed("hidden",true).html(""); return; }
+  box.classed("hidden",false).html("");
+  setGroupColors(ev);
+
+  const cm=data.explanatory.conditional_missing[ev];
+  const vals=cm.values;                       // [{value,count}]
+  const fmtN=d3.format(","), fmtPct=d3.format(".0%");
+
+  // rank targets by how strongly this variable explains their absence
+  let targets=Object.keys(cm.targets).map(tv=>{
+    const rates=cm.targets[tv];
+    const arr=vals.map(v=> rates[v.value] ?? 0);
+    return {tv, rates, spread: d3.max(arr)-d3.min(arr)};
+  }).filter(t=> t.spread>0.02).sort((a,b)=> b.spread-a.spread).slice(0,15);
+
+  box.append("h2").text("Why is data missing?");
+  box.append("p").attr("class","msub").html(
+    `Missing rate of each variable, split by <b>${ev}</b>. A bar near 100% in one `+
+    `group and near 0% in another means <b>${ev}</b> explains the absence - the data `+
+    `isn't missing at random, it's missing by group.`);
+
+  const leg=box.append("div").attr("class","mlegend");
+  leg.append("span").attr("class","leghint").text("filter to a group:");
+  vals.forEach(v=>{
+    const active = state.sel && state.sel.type==='group' && state.sel.value===v.value;
+    leg.append("button").attr("class","legbtn"+(active?" active":""))
+      .html(`<span class="sw" style="background:${groupColor(v.value)}"></span>${v.value} (${fmtN(v.count)})`)
+      .on("click",()=>{
+        state.sel = active ? null : {type:'group', ev:ev, value:v.value};
+        render();
+      });
+  });
+
+  if(!targets.length){
+    box.append("p").attr("class","msub").text("This variable does not explain any partial missingness.");
+    return;
+  }
+
+  const orList=a=> a.length<=1 ? (a[0]||"") : a.slice(0,-1).join(", ")+" or "+a[a.length-1];
+  const pctR=r=> Math.round(r*100)+"%";
+
+  targets.forEach(t=>{
+    const arr=vals.map(v=>({value:v.value, rate:t.rates[v.value] ?? 0})).sort((a,b)=> b.rate-a.rate);
+    const hi=arr[0], lo=arr[arr.length-1];
+    // "fully explained" only when every group is at an extreme (all ~0 or ~1)
+    const allExtreme=arr.every(a=> a.rate>=0.98 || a.rate<=0.02);
+    const fully = allExtreme && hi.rate>=0.98 && lo.rate<=0.02;
+
+    const row=box.append("div").attr("class","mrow");
+    const name=row.append("div").attr("class","mname");
+    name.append("span").text(t.tv);
+    if(fully) name.append("span").attr("class","tag").text("fully explained");
+
+    const groups=row.append("div").attr("class","mgroups");
+    vals.forEach(v=>{
+      const r=t.rates[v.value] ?? 0;
+      const grp=groups.append("div").attr("class","mgrp");
+      grp.append("span").attr("class","glabel").attr("title",v.value).text(v.value);
+      grp.append("div").attr("class","track").append("div").attr("class","fill")
+         .style("width",(r*100)+"%").style("background",groupColor(v.value));
+      grp.append("span").attr("class","grate").text(fmtPct(r));
+    });
+
+    // plain-language finding, generated from the rates above
+    let sentence;
+    if(fully){
+      const miss=arr.filter(a=> a.rate>=0.98).map(a=>a.value);
+      const pres=arr.filter(a=> a.rate<=0.02).map(a=>a.value);
+      sentence=`<b>${t.tv}</b> is missing <b>only</b> when ${ev} is <b>${orList(miss)}</b> - `+
+               `absent in every such sample, and recorded in all <b>${orList(pres)}</b> samples.`;
+    } else {
+      sentence=`<b>${t.tv}</b> is missing more often when ${ev} is <b>${hi.value}</b> `+
+               `(${pctR(hi.rate)}) than when it is <b>${lo.value}</b> (${pctR(lo.rate)}).`;
+    }
+    groups.append("div").attr("class","mfind").html(`<span class="lead">→</span>${sentence}`);
+  });
+}
+</script>
+</body>
+</html>
