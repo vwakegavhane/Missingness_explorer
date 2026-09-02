@@ -164,6 +164,11 @@
   .cempty{color:var(--muted);font-size:13px;padding:24px}
 
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  .credit{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);
+          font-size:12.5px;color:var(--muted);line-height:1.7}
+  .credit strong{color:var(--head)}
+  .credit a{color:var(--missing);text-decoration:none}
+  .credit a:hover{text-decoration:underline}
 </style>
 </head>
 <body>
@@ -240,6 +245,12 @@
     <p class="msub" id="comsub"></p>
     <div id="comgraph"></div>
   </div>
+
+  <footer class="credit">
+    <div><strong>Vivek Gavhane</strong> &middot; MSc Data Science and AI, Newcastle University &middot; Supervised by Dr Sara Johansson Fernstad</div>
+    <div>Code: <a href="https://github.com/vwakegavhane/Missingness_explorer">github.com/vwakegavhane/Missingness_explorer</a>
+      &middot; Data: UK Crop Microbiome Cryobank (ENA PRJEB58189)</div>
+  </footer>
 
   <div id="drop">
     Couldn't auto-load <code>summary.json</code>.
