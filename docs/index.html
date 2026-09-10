@@ -182,7 +182,7 @@
     <span class="keyitem"><span class="ksw" style="background:var(--missing)"></span>inked = missing value</span>
     <span class="keyitem"><span class="ksw" style="background:var(--present)"></span>pale = present</span>
     <span class="keyitem"><span class="krows"><i></i><i></i><i></i></span>each row = a pattern (height = share of samples)</span>
-    <span class="keyitem"><span class="ksw ring" style="border-color:var(--accent)"></span>amber = partly missing (the structured kind)</span>
+    <span class="keyitem"><span class="ksw ring" style="border-color:var(--accent)"></span>amber = partly missing</span>
   </div>
 
   <div class="chips" id="chips"></div>
@@ -204,7 +204,7 @@
       <button class="seg" id="hEqual" aria-pressed="false">equal</button>
     </div>
     <label class="toggle">
-      <input type="checkbox" id="focus"> focus structured missingness
+      <input type="checkbox" id="focus"> focus partially-missing variables
     </label>
     <div class="group">
       <label>Explain missingness by</label>
@@ -233,7 +233,7 @@
       </div>
     </div>
     <p class="msub">One glyph per variable. The ring fills with the variable's missing rate;
-       <b style="color:var(--accent)">amber</b> marks partial (structured) missingness - the
+       <b style="color:var(--accent)">amber</b> marks partially-missing variables - the
        interesting kind - while <b style="color:var(--missing)">teal</b> marks all-or-nothing
        columns. The centre dot grows with how many other variables it tends to go missing with.
        Click a glyph to highlight its column in the matrix.</p>
@@ -388,15 +388,19 @@ function showHeadline(data){
       const coverage=d3.sum(missVals,v=>counts[v])/totalN;   // share of samples affected
       const score=(vals.length===2?100:0) + coverage;        // prefer clean 2-group splits
       if(!best || score>best.score)
-        best={ev,tv,missVals,presVals:vals.filter(v=>(rates[v]??0)<=0.02),score};
+        best={ev,tv,missVals,presVals:vals.filter(v=>(rates[v]??0)<=0.02),score,
+              hi:Math.max(...arr), lo:Math.min(...arr),
+              missN:d3.sum(missVals,v=>counts[v]), presN:totalN-d3.sum(missVals,v=>counts[v])};
     }
   }
   if(!best){ box.classed("hidden",true); return; }
   const orList=a=> a.length<=1?(a[0]||""):a.slice(0,-1).join(", ")+" or "+a[a.length-1];
+  const pc=r=>Math.round(r*100)+"%";
   box.classed("hidden",false).html(
     `<span class="flag">key finding</span>`+
-    `<span><b>${best.tv}</b> is missing only when <b>${best.ev}</b> is <b>${orList(best.missVals)}</b> `+
-    `- never otherwise.</span>`+
+    `<span><b>${best.tv}</b> is missing almost exclusively when <b>${best.ev}</b> is `+
+    `<b>${orList(best.missVals)}</b> `+
+    `(${pc(best.hi)} of those samples vs ${pc(best.lo)} otherwise).</span>`+
     `<span class="go">see how ›</span>`)
     .on("click",()=>{
       state.explainBy=best.ev;
@@ -604,7 +608,7 @@ function render(animate=true){
   if(!showLabels){
     svg.append("text").attr("class","axis-note")
       .attr("x",margin.left).attr("y",svgH-8)
-      .text("hover a column for its variable name  ·  click a row to inspect a pattern  ·  toggle “focus structured missingness”");
+      .text("hover a column for its variable name  ·  click a row to inspect a pattern  ·  toggle “focus partially-missing variables”");
   }
 
   renderDetail();
@@ -681,7 +685,7 @@ function renderComissing(){
   const links=edges.map(e=>({source:e.source, target:e.target, corr:e.corr}));
 
   const allOne=edges.every(e=>Math.abs(e.corr)>=0.999);
-  sub.html(`Variables joined by a line go missing in the same records. `+
+  sub.html(`Variables joined by a line tend to be missing in the same records (teal), or to be mutually exclusive if the link is a contrasting colour. `+
     (allOne
       ? `Every link here is a <b>perfect</b> co-occurrence (φ = 1.0), so each cluster is a set of variables that are <b>always absent together</b>.`
       : `Line thickness ∝ strength of the relationship.`)+
@@ -708,7 +712,7 @@ function renderComissing(){
     .attr("fill",cAcc).attr("fill-opacity",.85).attr("stroke",cMiss).attr("stroke-width",1.4)
     .on("mousemove",(ev,d)=> showTip(
         `<b>${d.id}</b><br>missing <span class="st">${d3.format(".1%")(d.rate)}</span>`+
-        `<br>always co-missing with <span class="st">${d.deg}</span> variable(s)`, ev))
+        `<br>linked to <span class="st">${d.deg}</span> variable(s) by shared missingness`, ev))
     .on("mouseover",(ev,d)=>{
         node.attr("opacity",n=> (n.id===d.id||adj[d.id].has(n.id))?1:.18);
         link.attr("stroke-opacity",l=> (l.source.id===d.id||l.target.id===d.id)?.7:.04);
@@ -814,8 +818,8 @@ function renderMechanism(){
   box.append("h2").text("Why is data missing?");
   box.append("p").attr("class","msub").html(
     `Missing rate of each variable, split by <b>${ev}</b>. A bar near 100% in one `+
-    `group and near 0% in another means <b>${ev}</b> explains the absence - the data `+
-    `isn't missing at random, it's missing by group.`);
+    `group and near 0% in another means missingness differs strongly across `+
+    `<b>${ev}</b> groups (an association, not proof of cause).`);
 
   const leg=box.append("div").attr("class","mlegend");
   leg.append("span").attr("class","leghint").text("filter to a group:");
@@ -847,7 +851,7 @@ function renderMechanism(){
     const row=box.append("div").attr("class","mrow");
     const name=row.append("div").attr("class","mname");
     name.append("span").text(t.tv);
-    if(fully) name.append("span").attr("class","tag").text("fully explained");
+    if(fully) name.append("span").attr("class","tag").text("near-total split");
 
     const groups=row.append("div").attr("class","mgroups");
     vals.forEach(v=>{
@@ -864,8 +868,8 @@ function renderMechanism(){
     if(fully){
       const miss=arr.filter(a=> a.rate>=0.98).map(a=>a.value);
       const pres=arr.filter(a=> a.rate<=0.02).map(a=>a.value);
-      sentence=`<b>${t.tv}</b> is missing <b>only</b> when ${ev} is <b>${orList(miss)}</b> - `+
-               `absent in every such sample, and recorded in all <b>${orList(pres)}</b> samples.`;
+      sentence=`<b>${t.tv}</b> is missing almost exclusively when ${ev} is <b>${orList(miss)}</b> `+
+               `(${pctR(hi.rate)} there vs ${pctR(lo.rate)} in <b>${orList(pres)}</b>).`;
     } else {
       sentence=`<b>${t.tv}</b> is missing more often when ${ev} is <b>${hi.value}</b> `+
                `(${pctR(hi.rate)}) than when it is <b>${lo.value}</b> (${pctR(lo.rate)}).`;
